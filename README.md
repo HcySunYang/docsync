@@ -1,6 +1,6 @@
 # docsync
 
-A CLI tool that syncs markdown docs across machines using a GitHub repo as the storage backend.
+Generate docs anywhere, push from anywhere, pull on any machine — no manual copying, no git commands. Just `docsync push` and `docsync pull`.
 
 ## Why
 
