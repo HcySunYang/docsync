@@ -1,0 +1,112 @@
+{
+  "name": "docsync-vscode",
+  "displayName": "DocSync",
+  "description": "Sync markdown docs across machines — VSCode extension",
+  "version": "0.1.0",
+  "publisher": "docsync",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "views": {
+      "explorer": [
+        {
+          "id": "docsyncExplorer",
+          "name": "DOCSYNC"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "docsyncExplorer",
+        "contents": "No DocSync configuration found.\n[Initialize DocSync](command:docsync.init)"
+      }
+    ],
+    "commands": [
+      {
+        "command": "docsync.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "docsync.pullAll",
+        "title": "Pull All",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "docsync.pushFile",
+        "title": "Push to DocSync",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "docsync.viewFile",
+        "title": "View File"
+      },
+      {
+        "command": "docsync.deleteFile",
+        "title": "Delete"
+      },
+      {
+        "command": "docsync.moveFile",
+        "title": "Move to..."
+      },
+      {
+        "command": "docsync.init",
+        "title": "DocSync: Initialize"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "docsync.refresh",
+          "when": "view == docsyncExplorer",
+          "group": "navigation"
+        },
+        {
+          "command": "docsync.pullAll",
+          "when": "view == docsyncExplorer",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "docsync.viewFile",
+          "when": "view == docsyncExplorer && viewItem == file"
+        },
+        {
+          "command": "docsync.deleteFile",
+          "when": "view == docsyncExplorer && viewItem == file"
+        },
+        {
+          "command": "docsync.moveFile",
+          "when": "view == docsyncExplorer && viewItem == file"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "docsync.pushFile",
+          "when": "resourceExtname == .md || resourceExtname == .mdx",
+          "group": "docsync@1"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.js",
+    "dev": "node esbuild.js --watch",
+    "typecheck": "tsc --noEmit",
+    "package": "vsce package --no-dependencies"
+  },
+  "dependencies": {
+    "docsync-cli": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^25.5.2",
+    "esbuild": "^0.25.0",
+    "typescript": "^6.0.2"
+  }
+}
