@@ -173,6 +173,7 @@ Orchestrates all document operations:
 
 | Layer | Choice | Rationale |
 |-------|--------|-----------|
+| Monorepo | pnpm workspaces | Fast, disk-efficient, native workspace support |
 | Language | TypeScript (ESM, Node ≥ 20) | Type safety, modern module system |
 | CLI framework | Commander.js | Lightweight, clean subcommand API |
 | Interactive prompts | @inquirer/prompts | Search/autocomplete for folder picker |
@@ -183,45 +184,40 @@ Orchestrates all document operations:
 | Test | vitest | Native ESM/TS, fast, Jest-compatible |
 | Output | chalk + ora | Colored logs + spinners |
 
-## File Structure
+## Project Structure
 
 ```
-docsync/
-├── bin/docsync.ts                         # CLI entry point
-├── src/
-│   ├── cli.ts                             # Commander program definition (8 commands)
-│   ├── commands/
-│   │   ├── init.ts                        # docsync init
-│   │   ├── push.ts                        # docsync push (with folder picker)
-│   │   ├── pull.ts                        # docsync pull (with tree view)
-│   │   ├── open.ts                        # docsync open (cross-platform)
-│   │   ├── list.ts                        # docsync list / ls (tree view)
-│   │   ├── cat.ts                         # docsync cat (with file picker)
-│   │   ├── rm.ts                          # docsync rm (with multi-select picker)
-│   │   └── mv.ts                          # docsync mv (with file + folder picker)
-│   ├── transport/
-│   │   ├── interface.ts                   # ITransport interface (incl. moveFile)
-│   │   ├── github-api.transport.ts        # Octokit + Git Data API
-│   │   ├── git-cli.transport.ts           # exec + simple-git + proxy support
-│   │   └── factory.ts                     # Auto-detect and instantiate
-│   ├── config/
-│   │   ├── schema.ts                      # Zod schema
-│   │   ├── manager.ts                     # Load/save/token resolution
-│   │   └── defaults.ts                    # Default values
-│   ├── sync/
-│   │   ├── engine.ts                      # Push/pull/cat/rm/mv with retry
-│   │   └── conflict.ts                    # Conflict resolution (extensible)
-│   └── utils/
-│       ├── tree.ts                        # Shared tree view renderer
-│       ├── file-picker.ts                 # Shared interactive pickers
-│       ├── errors.ts                      # Shared error formatting
-│       ├── files.ts                       # File resolution + formatting
-│       ├── logger.ts                      # Chalk-based logging
-│       ├── spinner.ts                     # Ora spinner wrapper
-│       ├── machine.ts                     # Hostname detection
-│       └── prompt.ts                      # Inquirer re-exports
-├── test/unit/                             # 105 unit tests (vitest)
-├── package.json
-├── tsconfig.json
-└── tsup.config.ts
+docsync/                                    # pnpm workspace root
+├── packages/
+│   └── cli/                               # CLI package (docsync-cli)
+│       ├── bin/docsync.ts                 # CLI entry point
+│       ├── src/
+│       │   ├── cli.ts                     # Commander program definition (8 commands)
+│       │   ├── commands/
+│       │   │   ├── init.ts                # docsync init
+│       │   │   ├── push.ts                # docsync push (with folder picker)
+│       │   │   ├── pull.ts                # docsync pull (with tree view)
+│       │   │   ├── open.ts                # docsync open (cross-platform)
+│       │   │   ├── list.ts                # docsync list / ls (tree view)
+│       │   │   ├── cat.ts                 # docsync cat (with file picker)
+│       │   │   ├── rm.ts                  # docsync rm (with multi-select picker)
+│       │   │   └── mv.ts                  # docsync mv (with file + folder picker)
+│       │   ├── transport/
+│       │   │   ├── interface.ts           # ITransport interface (incl. moveFile)
+│       │   │   ├── github-api.transport.ts
+│       │   │   ├── git-cli.transport.ts
+│       │   │   └── factory.ts
+│       │   ├── config/                    # Zod schema, manager, defaults
+│       │   ├── sync/                      # Engine (with retry) + conflict resolution
+│       │   └── utils/                     # tree, file-picker, errors, files, logger, etc.
+│       ├── test/unit/                     # 105 unit tests (vitest)
+│       ├── package.json
+│       ├── tsconfig.json                  # extends ../../tsconfig.base.json
+│       └── tsup.config.ts
+├── pnpm-workspace.yaml                    # workspace definition
+├── package.json                           # workspace root (private)
+├── tsconfig.base.json                     # shared TypeScript config
+├── .npmrc
+├── README.md
+└── ARCHITECTURE.md
 ```

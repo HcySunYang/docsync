@@ -1,0 +1,50 @@
+{
+  "name": "docsync-cli",
+  "version": "0.1.0",
+  "description": "Sync markdown docs across machines using GitHub as backend",
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "docsync": "./dist/bin/docsync.js"
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "keywords": [
+    "docs",
+    "sync",
+    "markdown",
+    "github",
+    "cli"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@inquirer/prompts": "^8.3.2",
+    "@octokit/rest": "^22.0.1",
+    "chalk": "^5.6.2",
+    "commander": "^14.0.3",
+    "glob": "^13.0.6",
+    "ora": "^9.3.0",
+    "simple-git": "^3.33.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.2",
+    "tsup": "^8.5.1",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.2"
+  }
+}

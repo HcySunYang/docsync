@@ -19,8 +19,8 @@ Or run from source:
 ```bash
 git clone https://github.com/HcySunYang/docsync.git
 cd docsync
-npm install
-npm run build
+pnpm install
+pnpm run build
 ```
 
 ## Setup
