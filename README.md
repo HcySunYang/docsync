@@ -1,6 +1,6 @@
 # docsync
 
-Generate docs anywhere, push from anywhere, pull on any machine — no manual copying, no git commands. Just `docsync push` and `docsync pull`.
+Generate docs anywhere, push from anywhere, pull on any machine — no manual copying, no git commands. Manage your docs entirely from the CLI.
 
 ## Why
 
@@ -86,6 +86,51 @@ docsync open guides/
 ```
 
 Opens your local docs folder in Finder / file manager.
+
+### List remote docs
+
+```bash
+docsync list
+docsync list guides/
+```
+
+Shows a tree view of all docs in your remote repo:
+
+```
+📂 guides/
+   📂 setup/
+      design.md          4.5 KB
+   deployment.md         2.1 KB
+📂 notes/
+   meeting.md            1.1 KB
+
+3 files, 7.7 KB total
+```
+
+### View a remote file
+
+```bash
+docsync cat guides/setup.md
+```
+
+Prints the file content to stdout (pipeable: `docsync cat notes.md | pbcopy`). Run without arguments for an interactive file picker.
+
+### Remove files
+
+```bash
+docsync rm guides/old-doc.md
+```
+
+Shows what will be deleted and asks for confirmation. Run without arguments for an interactive multi-select picker to choose which files to remove.
+
+### Move / rename files
+
+```bash
+docsync mv guides/old.md references/new.md
+docsync mv guides/doc.md notes/          # keeps original filename
+```
+
+Moves a file within the remote repo (atomic, single commit). Run without arguments for an interactive file picker (source) + folder picker (destination).
 
 ## How it works
 

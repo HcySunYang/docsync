@@ -3,6 +3,10 @@ import { initCommand } from "./commands/init.js";
 import { pushCommand } from "./commands/push.js";
 import { pullCommand } from "./commands/pull.js";
 import { openCommand } from "./commands/open.js";
+import { listCommand } from "./commands/list.js";
+import { catCommand } from "./commands/cat.js";
+import { rmCommand } from "./commands/rm.js";
+import { mvCommand } from "./commands/mv.js";
 
 export function createCli(): Command {
   const program = new Command();
@@ -16,6 +20,10 @@ export function createCli(): Command {
   program.addCommand(pushCommand());
   program.addCommand(pullCommand());
   program.addCommand(openCommand());
+  program.addCommand(listCommand());
+  program.addCommand(catCommand());
+  program.addCommand(rmCommand());
+  program.addCommand(mvCommand());
 
   return program;
 }

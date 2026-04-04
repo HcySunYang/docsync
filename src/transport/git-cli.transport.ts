@@ -251,4 +251,18 @@ export class GitCLITransport implements ITransport {
     await this.git.commit(message);
     await this.git.push("origin", this.branch);
   }
+
+  async moveFile(
+    from: string,
+    to: string,
+    message: string,
+  ): Promise<void> {
+    const toFullPath = path.join(this.repoDir, to);
+    await fs.mkdir(path.dirname(toFullPath), { recursive: true });
+
+    // Use git mv for atomic rename with history tracking
+    await this.git.raw(["mv", from, to]);
+    await this.git.commit(message);
+    await this.git.push("origin", this.branch);
+  }
 }

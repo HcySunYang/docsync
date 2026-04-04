@@ -73,4 +73,7 @@ export interface ITransport {
 
   /** Delete a file from the repo */
   deleteFile(path: string, sha: string, message: string): Promise<void>;
+
+  /** Move/rename a file within the repo (atomic, single commit) */
+  moveFile(from: string, to: string, message: string): Promise<void>;
 }

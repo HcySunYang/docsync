@@ -261,4 +261,67 @@ export class GitHubAPITransport implements ITransport {
       branch: this.branch,
     });
   }
+
+  async moveFile(
+    from: string,
+    to: string,
+    message: string,
+  ): Promise<void> {
+    // Atomic move via Git Data API:
+    // 1. Get current commit + tree SHA
+    const { data: ref } = await this.octokit.rest.git.getRef({
+      owner: this.owner,
+      repo: this.repo,
+      ref: `heads/${this.branch}`,
+    });
+    const parentSha = ref.object.sha;
+
+    const { data: commit } = await this.octokit.rest.git.getCommit({
+      owner: this.owner,
+      repo: this.repo,
+      commit_sha: parentSha,
+    });
+    const baseTreeSha = commit.tree.sha;
+
+    // 2. Get source file's blob SHA (reuse it, no re-upload needed)
+    const sourceFile = await this.getFile(from);
+
+    // 3. Create new tree: add dest entry (reusing blob SHA) + remove source
+    const { data: newTree } = await this.octokit.rest.git.createTree({
+      owner: this.owner,
+      repo: this.repo,
+      base_tree: baseTreeSha,
+      tree: [
+        {
+          path: to,
+          mode: "100644",
+          type: "blob",
+          sha: sourceFile.sha,
+        },
+        {
+          path: from,
+          mode: "100644",
+          type: "blob",
+          sha: null as unknown as string, // Tells GitHub to delete this entry
+        },
+      ],
+    });
+
+    // 4. Create commit
+    const { data: newCommit } = await this.octokit.rest.git.createCommit({
+      owner: this.owner,
+      repo: this.repo,
+      message,
+      tree: newTree.sha,
+      parents: [parentSha],
+    });
+
+    // 5. Update ref
+    await this.octokit.rest.git.updateRef({
+      owner: this.owner,
+      repo: this.repo,
+      ref: `heads/${this.branch}`,
+      sha: newCommit.sha,
+    });
+  }
 }

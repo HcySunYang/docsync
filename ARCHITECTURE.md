@@ -18,6 +18,12 @@ Machine A (any directory)            GitHub Repo              Machine B
 - **Push** reads a file from wherever it lives, shows an interactive folder picker, and uploads to the chosen location in the GitHub repo. The source file stays in place.
 - **Pull** downloads everything from the GitHub repo into `~/.docsync/docs/`, preserving the folder structure.
 - **Open** opens the local docs folder in the OS file manager.
+- **List** shows a tree view of all remote docs with file sizes.
+- **Cat** displays a remote file's content in the terminal (pipeable).
+- **Rm** removes files from the remote repo with confirmation.
+- **Mv** moves/renames files within the remote repo (atomic, single commit).
+
+All commands that accept file/folder arguments show **interactive pickers when arguments are omitted** — consistent UX across the tool.
 
 ## System Architecture
 
@@ -25,9 +31,9 @@ Machine A (any directory)            GitHub Repo              Machine B
 ┌──────────────────────────────────────────────────────────────┐
 │                        docsync CLI                           │
 │                      (Commander.js)                          │
-├──────────┬──────────┬──────────┬─────────────────────────────┤
-│   init   │   push   │   pull   │   open                     │
-├──────────┴──────────┴──────────┴─────────────────────────────┤
+├──────────┬──────────┬──────────┬──────────┬─────┬─────┬─────┬─────┤
+│   init   │   push   │   pull   │   open   │list │ cat │ rm  │ mv  │
+├──────────┴──────────┴──────────┴──────────┴─────┴─────┴─────┴─────┤
 │                      Sync Engine                             │
 │              (retry logic, commit messages)                   │
 ├──────────────────────────────────────────────────────────────┤
@@ -57,9 +63,13 @@ Machine A (any directory)            GitHub Repo              Machine B
 | Command | File | Description |
 |---------|------|-------------|
 | `docsync init` | `init.ts` | Interactive setup wizard. Asks for repo, branch, machine name, and GitHub token. Verifies repo access via Octokit before saving config. |
-| `docsync push <paths...>` | `push.ts` | Resolves file paths (supports files, globs, directories). Connects to remote, fetches folder list, shows interactive folder picker (`@inquirer/prompts` search), then pushes via SyncEngine. |
+| `docsync push <paths...>` | `push.ts` | Resolves file paths (supports files, globs, directories). Connects to remote, shows interactive folder picker, then pushes via SyncEngine. |
 | `docsync pull` | `pull.ts` | Downloads all files from the remote repo. Shows a tree view with status (new/updated/unchanged). Skips unchanged files by comparing content. |
 | `docsync open [subfolder]` | `open.ts` | Opens `~/.docsync/docs/` in the OS file manager. Cross-platform: `open` (macOS), `xdg-open` (Linux), `explorer` (Windows). |
+| `docsync list [path]` | `list.ts` | Lists remote files in a tree view with sizes. Optional path filter for subfolder. Alias: `docsync ls`. |
+| `docsync cat [path]` | `cat.ts` | Displays a remote file's content. Interactive file picker when no path given. Output is pipeable. |
+| `docsync rm [paths...]` | `rm.ts` | Removes files from remote with confirmation (default: No). Interactive multi-select picker when no paths given. |
+| `docsync mv [src] [dest]` | `mv.ts` | Atomic move/rename within the remote repo. Interactive file picker (source) + folder picker (dest) when args omitted. |
 
 ### Transport Layer (`src/transport/`)
 
@@ -69,12 +79,14 @@ The transport abstraction (`ITransport` interface) decouples commands from the G
 - Uses `@octokit/rest` (Octokit)
 - Single-file operations use the Contents API
 - Multi-file pushes use the Git Data API for atomic commits: create blobs → create tree → create commit → update ref
+- Atomic moves via Git Data API: reuses source blob SHA in a new tree entry (zero re-upload), deletes source — single commit
 - Works without git installed — ideal for restricted cloud VMs
 
 **Git CLI Transport** (`git-cli.transport.ts`)
 - Maintains a shallow clone at `~/.docsync/.gitrepo/`
 - Uses `child_process.exec` for clone operations (more reliable timeout than simple-git)
 - Uses `simple-git` for subsequent operations (add, commit, push, fetch, pull)
+- Atomic moves via native `git mv` command
 - Auto-detects proxy from environment (`https_proxy`, `http_proxy`, `all_proxy`) and passes as `-c` flags
 - 120-second timeout on network operations
 - Cleans up stale `.gitrepo` directories from failed previous attempts
@@ -108,10 +120,25 @@ Config lives at `~/.docsync/config.json` and is validated with Zod:
 
 ### Sync Engine (`src/sync/engine.ts`)
 
-Orchestrates push/pull operations:
+Orchestrates all document operations:
 - **Push**: normalizes destination folder, builds file payloads, generates commit messages (includes machine name), calls `transport.putFiles()` with retry logic
 - **Pull**: fetches full tree via `transport.getTree()`, downloads all blob entries
+- **Cat**: fetches a single file's content via `transport.getFile()`
+- **Remove**: fetches SHA for each file, then deletes via `transport.deleteFile()` — per-file error handling
+- **Move**: delegates to `transport.moveFile()` for atomic rename in a single commit
 - **Retry**: exponential backoff (1s → 2s → 4s) for transient errors (ECONNRESET, ETIMEDOUT, 502, 503, rate limit)
+
+### Shared Utilities (`src/utils/`)
+
+- **`tree.ts`** — `printTree()`: renders a tree view of files with optional status indicators. Used by `pull` (with status) and `list` (without status).
+- **`file-picker.ts`** — Interactive pickers shared across commands:
+  - `pickFile()` — single-select search/filter (used by `cat`, `mv`)
+  - `pickFiles()` — multi-select checkbox (used by `rm`)
+  - `pickFolder()` — folder search/filter with create-new option (used by `push`, `mv`)
+- **`errors.ts`** — `formatError()`: consistent error messages for GitHub API errors (auth, 404, network, rate limit)
+- **`files.ts`** — `resolveFiles()`, `formatFileSize()`
+- **`logger.ts`** — chalk-based structured logging
+- **`spinner.ts`** — ora spinner wrapper
 
 ## Data Flow
 
@@ -162,14 +189,18 @@ Orchestrates push/pull operations:
 docsync/
 ├── bin/docsync.ts                         # CLI entry point
 ├── src/
-│   ├── cli.ts                             # Commander program definition
+│   ├── cli.ts                             # Commander program definition (8 commands)
 │   ├── commands/
 │   │   ├── init.ts                        # docsync init
 │   │   ├── push.ts                        # docsync push (with folder picker)
 │   │   ├── pull.ts                        # docsync pull (with tree view)
-│   │   └── open.ts                        # docsync open (cross-platform)
+│   │   ├── open.ts                        # docsync open (cross-platform)
+│   │   ├── list.ts                        # docsync list / ls (tree view)
+│   │   ├── cat.ts                         # docsync cat (with file picker)
+│   │   ├── rm.ts                          # docsync rm (with multi-select picker)
+│   │   └── mv.ts                          # docsync mv (with file + folder picker)
 │   ├── transport/
-│   │   ├── interface.ts                   # ITransport interface
+│   │   ├── interface.ts                   # ITransport interface (incl. moveFile)
 │   │   ├── github-api.transport.ts        # Octokit + Git Data API
 │   │   ├── git-cli.transport.ts           # exec + simple-git + proxy support
 │   │   └── factory.ts                     # Auto-detect and instantiate
@@ -178,10 +209,18 @@ docsync/
 │   │   ├── manager.ts                     # Load/save/token resolution
 │   │   └── defaults.ts                    # Default values
 │   ├── sync/
-│   │   ├── engine.ts                      # Push/pull with retry
+│   │   ├── engine.ts                      # Push/pull/cat/rm/mv with retry
 │   │   └── conflict.ts                    # Conflict resolution (extensible)
-│   └── utils/                             # Logger, spinner, files, machine, prompt
-├── test/unit/                             # 97 unit tests (vitest)
+│   └── utils/
+│       ├── tree.ts                        # Shared tree view renderer
+│       ├── file-picker.ts                 # Shared interactive pickers
+│       ├── errors.ts                      # Shared error formatting
+│       ├── files.ts                       # File resolution + formatting
+│       ├── logger.ts                      # Chalk-based logging
+│       ├── spinner.ts                     # Ora spinner wrapper
+│       ├── machine.ts                     # Hostname detection
+│       └── prompt.ts                      # Inquirer re-exports
+├── test/unit/                             # 105 unit tests (vitest)
 ├── package.json
 ├── tsconfig.json
 └── tsup.config.ts

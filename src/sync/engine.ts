@@ -128,4 +128,57 @@ export class SyncEngine {
   async getTree() {
     return this.transport.getTree();
   }
+
+  /**
+   * Get a remote file's content.
+   */
+  async getFileContent(
+    filePath: string,
+  ): Promise<{ content: string; size: number }> {
+    const file = await withRetry(() => this.transport.getFile(filePath));
+    return { content: file.content, size: file.size };
+  }
+
+  /**
+   * Remove files from the remote repo.
+   */
+  async removeFiles(
+    filePaths: string[],
+  ): Promise<{ removed: string[]; errors: { path: string; error: string }[] }> {
+    const result: { removed: string[]; errors: { path: string; error: string }[] } = {
+      removed: [],
+      errors: [],
+    };
+
+    const machineName = this.config.local.machineName;
+
+    for (const filePath of filePaths) {
+      try {
+        // Need SHA for GitHub API transport
+        const file = await this.transport.getFile(filePath);
+        const message =
+          filePaths.length === 1
+            ? `docsync: remove ${filePath} from ${machineName}`
+            : `docsync: remove ${filePath} (batch) from ${machineName}`;
+        await withRetry(() =>
+          this.transport.deleteFile(filePath, file.sha, message),
+        );
+        result.removed.push(filePath);
+      } catch (err: unknown) {
+        const errorMsg = err instanceof Error ? err.message : "Unknown error";
+        result.errors.push({ path: filePath, error: errorMsg });
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Move a file within the remote repo.
+   */
+  async moveFile(from: string, to: string): Promise<void> {
+    const machineName = this.config.local.machineName;
+    const message = `docsync: move ${from} → ${to} from ${machineName}`;
+    await withRetry(() => this.transport.moveFile(from, to, message));
+  }
 }

@@ -1,37 +1,15 @@
 import { Command } from "commander";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { search, input } from "@inquirer/prompts";
 import chalk from "chalk";
 import { ConfigManager } from "../config/manager.js";
 import { createTransport } from "../transport/factory.js";
 import { SyncEngine } from "../sync/engine.js";
 import { resolveFiles, formatFileSize } from "../utils/files.js";
+import { formatError } from "../utils/errors.js";
+import { pickFolder } from "../utils/file-picker.js";
 import { logger } from "../utils/logger.js";
 import { createSpinner } from "../utils/spinner.js";
-
-function formatError(err: unknown): string {
-  if (err instanceof Error) {
-    // Improve common GitHub API error messages
-    if (err.message.includes("Bad credentials")) {
-      return "Authentication failed. Your GitHub token may be expired or invalid.\n  Run `docsync init` to reconfigure.";
-    }
-    if (err.message.includes("Not Found")) {
-      return "Repository not found. Check that the repo exists and your token has access.\n  Run `docsync init` to reconfigure.";
-    }
-    if (
-      err.message.includes("ENOTFOUND") ||
-      err.message.includes("ECONNREFUSED")
-    ) {
-      return "Network error. Please check your internet connection.";
-    }
-    if (err.message.includes("rate limit")) {
-      return "GitHub API rate limit exceeded. Please wait a few minutes and try again.";
-    }
-    return err.message;
-  }
-  return "An unexpected error occurred.";
-}
 
 export function pushCommand(): Command {
   const cmd = new Command("push");
@@ -119,42 +97,11 @@ export function pushCommand(): Command {
         }
 
         // Interactive folder picker
-        const folderChoices = [
-          { name: "📂 / (repo root)", value: "/" },
-          ...folders.map((f) => ({
-            name: `📂 ${f}`,
-            value: f,
-          })),
-        ];
-
         console.log();
-        const destFolder = await search({
-          message:
-            "Where to save? (arrow keys to browse, type to filter or create new folder)",
-          source: (term) => {
-            const choices = [...folderChoices];
-
-            if (term && term.trim()) {
-              const normalized = term.endsWith("/") ? term : term + "/";
-              // Check if the typed term matches any existing folder
-              const exists = folders.some((f) => f === normalized);
-              if (!exists) {
-                choices.push({
-                  name: `📝 Create: ${normalized}`,
-                  value: normalized,
-                });
-              }
-              // Filter choices by term
-              return choices.filter(
-                (c) =>
-                  c.value.toLowerCase().includes(term.toLowerCase()) ||
-                  c.name.toLowerCase().includes(term.toLowerCase()),
-              );
-            }
-
-            return choices;
-          },
-        });
+        const destFolder = await pickFolder(
+          transport,
+          "Where to save? (arrow keys to browse, type to filter or create new folder)",
+        );
 
         // Push files
         console.log();

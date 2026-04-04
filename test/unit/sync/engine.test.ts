@@ -109,8 +109,21 @@ function createMockTransport(initialFiles: Map<string, { content: string; size: 
       }
     },
 
-    async deleteFile(filePath: string) {
+    async deleteFile(filePath: string, sha: string, message: string) {
+      const file = files.get(filePath);
+      if (!file) {
+        throw new Error(`File not found: ${filePath}`);
+      }
       files.delete(filePath);
+    },
+
+    async moveFile(from: string, to: string, message: string) {
+      const file = files.get(from);
+      if (!file) {
+        throw new Error(`File not found: ${from}`);
+      }
+      files.set(to, { content: file.content, size: file.size });
+      files.delete(from);
     },
   };
 
@@ -420,6 +433,111 @@ describe("SyncEngine", () => {
     it("returns empty tree for empty repo", async () => {
       const tree = await engine.getTree();
       expect(tree).toHaveLength(0);
+    });
+  });
+
+  describe("getFileContent()", () => {
+    it("returns content and size for an existing file", async () => {
+      const initialFiles = new Map([
+        ["docs/readme.md", { content: "# Hello World", size: 13 }],
+      ]);
+      mockTransport = createMockTransport(initialFiles);
+      engine = new SyncEngine(mockTransport, config);
+
+      const result = await engine.getFileContent("docs/readme.md");
+      expect(result.content).toBe("# Hello World");
+      expect(result.size).toBe(13);
+    });
+
+    it("throws when file doesn't exist", async () => {
+      await expect(engine.getFileContent("nonexistent.md")).rejects.toThrow(
+        "File not found: nonexistent.md",
+      );
+    });
+  });
+
+  describe("removeFiles()", () => {
+    it("removes a single file successfully", async () => {
+      const initialFiles = new Map([
+        ["docs/note.md", { content: "# Note", size: 6 }],
+      ]);
+      mockTransport = createMockTransport(initialFiles);
+      engine = new SyncEngine(mockTransport, config);
+
+      const result = await engine.removeFiles(["docs/note.md"]);
+      expect(result.removed).toEqual(["docs/note.md"]);
+      expect(result.errors).toHaveLength(0);
+      expect(mockTransport.files.has("docs/note.md")).toBe(false);
+    });
+
+    it("removes multiple files successfully", async () => {
+      const initialFiles = new Map([
+        ["a.md", { content: "A", size: 1 }],
+        ["b.md", { content: "B", size: 1 }],
+        ["c.md", { content: "C", size: 1 }],
+      ]);
+      mockTransport = createMockTransport(initialFiles);
+      engine = new SyncEngine(mockTransport, config);
+
+      const result = await engine.removeFiles(["a.md", "b.md", "c.md"]);
+      expect(result.removed).toEqual(["a.md", "b.md", "c.md"]);
+      expect(result.errors).toHaveLength(0);
+      expect(mockTransport.files.size).toBe(0);
+    });
+
+    it("returns errors for files that don't exist", async () => {
+      const result = await engine.removeFiles(["missing.md"]);
+      expect(result.removed).toHaveLength(0);
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].path).toBe("missing.md");
+      expect(result.errors[0].error).toBe("File not found: missing.md");
+    });
+
+    it("handles mixed success and failure (some files exist, some don't)", async () => {
+      const initialFiles = new Map([
+        ["exists.md", { content: "I exist", size: 7 }],
+      ]);
+      mockTransport = createMockTransport(initialFiles);
+      engine = new SyncEngine(mockTransport, config);
+
+      const result = await engine.removeFiles(["exists.md", "missing.md"]);
+      expect(result.removed).toEqual(["exists.md"]);
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].path).toBe("missing.md");
+      expect(result.errors[0].error).toBe("File not found: missing.md");
+      expect(mockTransport.files.has("exists.md")).toBe(false);
+    });
+  });
+
+  describe("moveFile()", () => {
+    it("moves a file to a new path", async () => {
+      const initialFiles = new Map([
+        ["old/doc.md", { content: "# Document", size: 10 }],
+      ]);
+      mockTransport = createMockTransport(initialFiles);
+      engine = new SyncEngine(mockTransport, config);
+
+      await engine.moveFile("old/doc.md", "new/doc.md");
+      expect(mockTransport.files.has("old/doc.md")).toBe(false);
+      expect(mockTransport.files.has("new/doc.md")).toBe(true);
+      expect(mockTransport.files.get("new/doc.md")!.content).toBe("# Document");
+    });
+
+    it("generates correct commit message with machine name", async () => {
+      const initialFiles = new Map([
+        ["src/file.md", { content: "content", size: 7 }],
+      ]);
+      mockTransport = createMockTransport(initialFiles);
+      engine = new SyncEngine(mockTransport, config);
+
+      const moveFileSpy = vi.spyOn(mockTransport, "moveFile");
+
+      await engine.moveFile("src/file.md", "dest/file.md");
+      expect(moveFileSpy).toHaveBeenCalledWith(
+        "src/file.md",
+        "dest/file.md",
+        "docsync: move src/file.md → dest/file.md from test-machine",
+      );
     });
   });
 });
