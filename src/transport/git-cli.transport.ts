@@ -1,14 +1,55 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { exec } from "node:child_process";
+import { promisify } from "node:util";
 import { simpleGit, type SimpleGit } from "simple-git";
 import type { ITransport, FileEntry, TreeEntry } from "./interface.js";
 import type { DocsyncConfig } from "../config/schema.js";
 import { ConfigManager, expandHome } from "../config/manager.js";
 
+const execAsync = promisify(exec);
+
+/** Default timeout for git network operations (120 seconds) */
+const GIT_TIMEOUT_MS = 120_000;
+
+/**
+ * Detect proxy URL from environment variables.
+ * Checks: https_proxy, HTTPS_PROXY, http_proxy, HTTP_PROXY, all_proxy, ALL_PROXY
+ */
+function detectProxy(): string | null {
+  return (
+    process.env.https_proxy ||
+    process.env.HTTPS_PROXY ||
+    process.env.http_proxy ||
+    process.env.HTTP_PROXY ||
+    process.env.all_proxy ||
+    process.env.ALL_PROXY ||
+    null
+  );
+}
+
+/**
+ * Build git CLI config arguments for proxy support.
+ * Returns a string like "-c http.proxy=http://... -c https.proxy=http://..."
+ * Used in shell commands for operations before a repo exists.
+ */
+function getProxyArgs(): string {
+  const proxy = detectProxy();
+  if (!proxy) return "";
+  return `-c http.proxy=${proxy} -c https.proxy=${proxy}`;
+}
+
+/**
+ * Create a SimpleGit instance with timeout support.
+ * Proxy is handled via command-line args, not git config (so it works pre-clone).
+ */
+function createGit(baseDir: string): SimpleGit {
+  return simpleGit(baseDir, { timeout: { block: GIT_TIMEOUT_MS } });
+}
+
 export class GitCLITransport implements ITransport {
   private git!: SimpleGit;
   private repoDir: string;
-  private repoUrl: string;
   private branch: string;
   private config: DocsyncConfig;
   private configManager: ConfigManager;
@@ -17,21 +58,34 @@ export class GitCLITransport implements ITransport {
     this.config = config;
     this.configManager = configManager;
     this.branch = config.repo.branch;
-    this.repoDir = path.join(
-      expandHome("~/.docsync"),
-      ".gitrepo",
-    );
-    this.repoUrl = `https://github.com/${config.repo.owner}/${config.repo.name}.git`;
+    this.repoDir = path.join(expandHome("~/.docsync"), ".gitrepo");
   }
 
   async connect(): Promise<void> {
     const token = await this.configManager.resolveToken(this.config);
     const authedUrl = `https://x-access-token:${token}@github.com/${this.config.repo.owner}/${this.config.repo.name}.git`;
+    const proxyArgs = getProxyArgs();
 
+    // Check if repo is already cloned
+    let isCloned = false;
     try {
       await fs.access(path.join(this.repoDir, ".git"));
+      isCloned = true;
+    } catch {
+      // Not cloned yet
+    }
+
+    if (isCloned) {
       // Repo already cloned — update remote URL and pull
-      this.git = simpleGit(this.repoDir);
+      this.git = createGit(this.repoDir);
+
+      // Set proxy in local git config if needed
+      const proxy = detectProxy();
+      if (proxy) {
+        await this.git.addConfig("http.proxy", proxy);
+        await this.git.addConfig("https.proxy", proxy);
+      }
+
       await this.git.remote(["set-url", "origin", authedUrl]);
       await this.git.fetch("origin", this.branch);
       try {
@@ -40,25 +94,42 @@ export class GitCLITransport implements ITransport {
       } catch {
         // Branch might not exist yet in an empty repo
       }
-    } catch {
-      // Clone the repo
-      await fs.mkdir(this.repoDir, { recursive: true });
+    } else {
+      // Clean up any stale/broken .gitrepo directory from previous failed attempts
+      try {
+        await fs.rm(this.repoDir, { recursive: true, force: true });
+      } catch {
+        // Ignore cleanup errors
+      }
+
+      // Clone the repo using exec directly (simple-git's timeout is unreliable for clone)
       const parentDir = path.dirname(this.repoDir);
       const dirName = path.basename(this.repoDir);
+      await fs.mkdir(parentDir, { recursive: true });
 
-      const tempGit = simpleGit(parentDir);
-      await tempGit.clone(authedUrl, dirName, [
-        "--depth",
-        "1",
-        "--single-branch",
-        "--branch",
-        this.branch,
-      ]).catch(async () => {
-        // If branch doesn't exist (empty repo), clone without branch
-        await tempGit.clone(authedUrl, dirName);
-      });
+      const cloneCmd = `git ${proxyArgs} clone --depth 1 --single-branch --branch ${this.branch} "${authedUrl}" "${dirName}"`;
 
-      this.git = simpleGit(this.repoDir);
+      try {
+        await execAsync(cloneCmd, { cwd: parentDir, timeout: GIT_TIMEOUT_MS });
+      } catch {
+        // If branch doesn't exist (empty repo), clone without branch spec
+        try {
+          await fs.rm(this.repoDir, { recursive: true, force: true });
+        } catch {
+          // Ignore
+        }
+        const fallbackCmd = `git ${proxyArgs} clone "${authedUrl}" "${dirName}"`;
+        await execAsync(fallbackCmd, { cwd: parentDir, timeout: GIT_TIMEOUT_MS });
+      }
+
+      this.git = createGit(this.repoDir);
+
+      // Set proxy in the newly cloned repo's local config
+      const proxy = detectProxy();
+      if (proxy) {
+        await this.git.addConfig("http.proxy", proxy);
+        await this.git.addConfig("https.proxy", proxy);
+      }
     }
   }
 

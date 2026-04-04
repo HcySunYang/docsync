@@ -94,6 +94,33 @@ Opens your local docs folder in Finder / file manager.
 - **Push from anywhere** — files don't need to be in a special folder
 - **Token resolution**: config file → `$GITHUB_TOKEN` → `gh auth token`
 
+## Troubleshooting
+
+### Push/pull hangs or times out
+
+If `docsync push` or `docsync pull` hangs, you likely need a proxy to reach GitHub. docsync auto-detects proxy settings from your environment variables (`https_proxy`, `http_proxy`, `all_proxy`), but they must be set **before** running docsync.
+
+```bash
+# Set your proxy first
+export https_proxy=http://127.0.0.1:<port>
+export http_proxy=http://127.0.0.1:<port>
+
+# Then run docsync
+docsync push ./design.md
+```
+
+docsync will automatically pass proxy settings to both the GitHub API client and the git CLI transport. Network operations timeout after 120 seconds — if you see a timeout error, check your proxy/internet connection.
+
+### Repository not found (404)
+
+Double-check the `owner/repo` you entered during `docsync init`. A common mistake is typos in the repo name. Re-run `docsync init` to fix it.
+
+Also make sure your GitHub token (PAT) has the `repo` scope, which is required to access private repositories.
+
+### Authentication failed
+
+Your GitHub token may be expired or have insufficient permissions. Re-run `docsync init` to set a new token.
+
 ## License
 
 MIT
