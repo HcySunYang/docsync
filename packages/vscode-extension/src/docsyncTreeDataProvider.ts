@@ -79,16 +79,47 @@ export class DocsyncTreeDataProvider
     dataTransfer: vscode.DataTransfer,
     _token: vscode.CancellationToken,
   ): Promise<void> {
-    // Only allow dragging files, not folders
-    const files = source.filter((item) => !item.isFolder);
-    if (files.length === 0) return;
+    if (source.length === 0) return;
+
+    // Collect all file paths — for folders, collect all descendant files
+    const filePaths = this.collectFilePaths(source);
+    if (filePaths.length === 0) return;
 
     // Set internal MIME type for moves within the tree
-    const paths = files.map((f) => f.remotePath);
     dataTransfer.set(
       DOCSYNC_MIME_TYPE,
-      new vscode.DataTransferItem(paths),
+      new vscode.DataTransferItem(filePaths),
     );
+
+    // Provide text/uri-list for external targets (Copilot Chat, editors, etc.)
+    // using resourceUri from the local docs dir
+    const config = this.service.getConfig();
+    if (config) {
+      const docsDir = expandHome(config.local.docsDir);
+      const uris = filePaths
+        .map((p) => vscode.Uri.file(`${docsDir}/${p}`).toString());
+      dataTransfer.set(
+        "text/uri-list",
+        new vscode.DataTransferItem(uris.join("\r\n")),
+      );
+    }
+  }
+
+  /**
+   * Collect all file paths from tree items.
+   * For folders, recursively collects all descendant file paths.
+   */
+  private collectFilePaths(items: readonly DocsyncTreeItem[]): string[] {
+    const paths: string[] = [];
+    for (const item of items) {
+      if (item.isFolder) {
+        // Recursively collect files from children
+        paths.push(...this.collectFilePaths(item.children));
+      } else {
+        paths.push(item.remotePath);
+      }
+    }
+    return paths;
   }
 
   public async handleDrop(

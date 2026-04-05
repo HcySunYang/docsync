@@ -17,6 +17,16 @@ export class DocsyncTreeItem extends vscode.TreeItem {
         : vscode.TreeItemCollapsibleState.None,
     );
 
+    // Explicitly set label to prevent resourceUri from overriding it
+    this.label = remotePath.split("/").pop() || remotePath;
+    this.tooltip = remotePath;
+
+    // Set resourceUri for all items — required by VSCode for text/uri-list
+    // drag support (enables drag to Copilot Chat, editors, etc.)
+    if (localDocsDir) {
+      this.resourceUri = vscode.Uri.file(`${localDocsDir}/${remotePath}`);
+    }
+
     if (isFolder) {
       this.contextValue = "folder";
       this.iconPath = new vscode.ThemeIcon("folder");
@@ -26,21 +36,11 @@ export class DocsyncTreeItem extends vscode.TreeItem {
       if (entry) {
         this.description = formatFileSize(entry.size);
       }
-      // Set resourceUri to local file path — this enables VSCode's built-in
-      // text/uri-list drag support (used by Copilot Chat, editors, etc.)
-      if (localDocsDir) {
-        this.resourceUri = vscode.Uri.file(
-          `${localDocsDir}/${remotePath}`,
-        );
-      }
-      // Click to view file
       this.command = {
         command: "docsync.viewFile",
         title: "View File",
         arguments: [this],
       };
     }
-
-    this.tooltip = remotePath;
   }
 }
