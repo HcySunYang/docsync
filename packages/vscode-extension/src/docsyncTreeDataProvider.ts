@@ -235,15 +235,19 @@ export class DocsyncTreeDataProvider
       children: new Map(),
     };
 
-    // Filter out common non-doc files that shouldn't appear in the tree
+    // Filter out common non-doc files that shouldn't appear in the tree.
+    // .gitkeep is kept for folder structure creation but filtered out as a visible file below.
     const hiddenFiles = [".gitignore", ".gitattributes", ".gitmodules", ".DS_Store", "Thumbs.db"];
     const hiddenPrefixes = [".git/"];
-    const files = entries.filter(
+    const visibleEntries = entries.filter(
       (e) =>
         e.type === "blob" &&
         !hiddenFiles.includes(path.basename(e.path)) &&
         !hiddenPrefixes.some((prefix) => e.path.startsWith(prefix)),
     );
+
+    // Build tree from visible entries (includes .gitkeep for folder creation)
+    const files = visibleEntries;
 
     for (const file of files) {
       const parts = file.path.split("/");
@@ -286,6 +290,9 @@ export class DocsyncTreeDataProvider
       for (const [, child] of sorted) {
         const isFolder = child.children.size > 0;
         const childItems = isFolder ? toTreeItems(child) : [];
+
+        // Skip .gitkeep placeholder files (used to create empty folders)
+        if (!isFolder && child.name === ".gitkeep") continue;
 
         items.push(
           new DocsyncTreeItem(

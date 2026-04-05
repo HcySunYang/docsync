@@ -57,12 +57,22 @@
       {
         "command": "docsync.init",
         "title": "DocSync: Initialize"
+      },
+      {
+        "command": "docsync.newFolder",
+        "title": "New Folder",
+        "icon": "$(new-folder)"
       }
     ],
     "menus": {
       "view/title": [
         {
           "command": "docsync.refresh",
+          "when": "view == docsyncExplorer",
+          "group": "navigation"
+        },
+        {
+          "command": "docsync.newFolder",
           "when": "view == docsyncExplorer",
           "group": "navigation"
         }
@@ -79,6 +89,14 @@
         {
           "command": "docsync.moveFile",
           "when": "view == docsyncExplorer && viewItem == file"
+        },
+        {
+          "command": "docsync.newFolder",
+          "when": "view == docsyncExplorer && viewItem == folder"
+        },
+        {
+          "command": "docsync.deleteFile",
+          "when": "view == docsyncExplorer && viewItem == folder"
         }
       ],
       "explorer/context": [

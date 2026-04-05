@@ -59,6 +59,11 @@ export function activate(context: vscode.ExtensionContext): void {
     handleMoveFile,
   );
 
+  const newFolderCmd = vscode.commands.registerCommand(
+    "docsync.newFolder",
+    handleNewFolder,
+  );
+
   context.subscriptions.push(
     treeView,
     initCmd,
@@ -68,6 +73,7 @@ export function activate(context: vscode.ExtensionContext): void {
     pushFileCmd,
     deleteFileCmd,
     moveFileCmd,
+    newFolderCmd,
   );
 
   // Auto-initialize if config exists (with progress)
@@ -297,10 +303,12 @@ async function handlePushFile(uri?: vscode.Uri): Promise<void> {
 }
 
 async function handleDeleteFile(item?: DocsyncTreeItem): Promise<void> {
-  if (!item || item.isFolder) return;
+  if (!item) return;
+
+  const label = item.isFolder ? `folder "${item.remotePath}/"` : `"${item.remotePath}"`;
 
   const answer = await vscode.window.showWarningMessage(
-    `Delete "${item.remotePath}" from DocSync?`,
+    `Delete ${label} from DocSync?${item.isFolder ? " All files inside will be removed." : ""}`,
     { modal: true },
     "Delete",
   );
@@ -311,17 +319,19 @@ async function handleDeleteFile(item?: DocsyncTreeItem): Promise<void> {
     await vscode.window.withProgress(
       {
         location: vscode.ProgressLocation.Notification,
-        title: `DocSync: Deleting ${item.remotePath}...`,
+        title: `DocSync: Deleting ${label}...`,
       },
       async () => {
-        await service.deleteFile(item.remotePath);
+        if (item.isFolder) {
+          await service.deleteFolder(item.remotePath);
+        } else {
+          await service.deleteFile(item.remotePath);
+        }
       },
     );
 
     treeProvider.refresh();
-    vscode.window.showInformationMessage(
-      `DocSync: Deleted ${item.remotePath}`,
-    );
+    vscode.window.showInformationMessage(`DocSync: Deleted ${label}`);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     vscode.window.showErrorMessage(`DocSync delete failed: ${message}`);
@@ -361,6 +371,58 @@ async function handleMoveFile(item?: DocsyncTreeItem): Promise<void> {
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     vscode.window.showErrorMessage(`DocSync move failed: ${message}`);
+  }
+}
+
+async function handleNewFolder(item?: DocsyncTreeItem): Promise<void> {
+  if (!service.isInitialized()) {
+    vscode.window.showWarningMessage(
+      'DocSync is not initialized yet. Run "DocSync: Initialize" from the Command Palette.',
+    );
+    return;
+  }
+
+  try {
+    // Determine parent path
+    let parentPath = "";
+    if (item?.isFolder) {
+      parentPath = item.remotePath + "/";
+    }
+
+    const folderName = await vscode.window.showInputBox({
+      prompt: `New folder name${parentPath ? ` inside ${parentPath}` : " at repo root"}`,
+      placeHolder: "e.g. my-new-folder",
+      validateInput: (value) => {
+        if (!value || !value.trim()) {
+          return "Folder name cannot be empty";
+        }
+        if (value.includes("/")) {
+          return "Use a simple name (no slashes). Nest by right-clicking an existing folder.";
+        }
+        return null;
+      },
+    });
+    if (!folderName) return;
+
+    const fullPath = parentPath + folderName;
+
+    await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: `DocSync: Creating folder ${fullPath}/...`,
+      },
+      async () => {
+        await service.createFolder(fullPath);
+      },
+    );
+
+    treeProvider.refresh();
+    vscode.window.showInformationMessage(
+      `DocSync: Created folder ${fullPath}/`,
+    );
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    vscode.window.showErrorMessage(`DocSync: Failed to create folder - ${message}`);
   }
 }
 

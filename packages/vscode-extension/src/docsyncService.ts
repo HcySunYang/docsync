@@ -87,9 +87,36 @@ export class DocsyncService {
     await this.engine!.removeFiles([filePath]);
   }
 
+  async deleteFolder(folderPath: string): Promise<number> {
+    this.ensureInitialized();
+    const tree = await this.engine!.getTree();
+    const prefix = folderPath.endsWith("/") ? folderPath : folderPath + "/";
+    const filesToDelete = tree
+      .filter((e) => e.type === "blob" && e.path.startsWith(prefix))
+      .map((e) => e.path);
+
+    if (filesToDelete.length === 0) return 0;
+
+    const result = await this.engine!.removeFiles(filesToDelete);
+    return result.removed.length;
+  }
+
   async moveFile(from: string, to: string): Promise<void> {
     this.ensureInitialized();
     await this.engine!.moveFile(from, to);
+  }
+
+  async createFolder(folderPath: string): Promise<void> {
+    this.ensureInitialized();
+    // Git doesn't track empty folders, so create a .gitkeep placeholder
+    const gitkeepPath = folderPath.endsWith("/")
+      ? `${folderPath}.gitkeep`
+      : `${folderPath}/.gitkeep`;
+    const message = `docsync: create folder ${folderPath} from ${this.config!.local.machineName}`;
+    await this.engine!.push(
+      [{ localPath: "", fileName: ".gitkeep", content: "" }],
+      folderPath.endsWith("/") ? folderPath : folderPath + "/",
+    );
   }
 
   async pullAll(): Promise<number> {
