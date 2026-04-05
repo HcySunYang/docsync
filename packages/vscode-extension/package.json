@@ -2,9 +2,10 @@
   "name": "docsync-vscode",
   "displayName": "DocSync",
   "description": "Sync markdown docs across machines using a GitHub repo. Browse, push, pull, move, and delete docs from the Explorer sidebar. Drag files to Copilot Chat for context.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "HcySunYang",
   "license": "MIT",
+  "icon": "icon.png",
   "repository": {
     "type": "git",
     "url": "https://github.com/HcySunYang/docsync"
