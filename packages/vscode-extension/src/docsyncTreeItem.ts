@@ -8,6 +8,7 @@ export class DocsyncTreeItem extends vscode.TreeItem {
     public readonly entry: TreeEntry | null,
     public readonly isFolder: boolean,
     public readonly children: DocsyncTreeItem[] = [],
+    localDocsDir?: string,
   ) {
     super(
       remotePath.split("/").pop() || remotePath,
@@ -24,6 +25,13 @@ export class DocsyncTreeItem extends vscode.TreeItem {
       this.iconPath = vscode.ThemeIcon.File;
       if (entry) {
         this.description = formatFileSize(entry.size);
+      }
+      // Set resourceUri to local file path — this enables VSCode's built-in
+      // text/uri-list drag support (used by Copilot Chat, editors, etc.)
+      if (localDocsDir) {
+        this.resourceUri = vscode.Uri.file(
+          `${localDocsDir}/${remotePath}`,
+        );
       }
       // Click to view file
       this.command = {

@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import * as path from "node:path";
 import type { DocsyncService } from "./docsyncService.js";
 import { DocsyncTreeItem } from "./docsyncTreeItem.js";
-import type { TreeEntry } from "docsync-cli";
+import { expandHome, type TreeEntry } from "docsync-cli";
 
 const DOCSYNC_MIME_TYPE = "application/vnd.code.tree.docsyncExplorer";
 
@@ -12,8 +12,10 @@ export class DocsyncTreeDataProvider
     vscode.TreeDragAndDropController<DocsyncTreeItem>
 {
   // --- Drag and Drop ---
+  // text/uri-list in dragMimeTypes enables VSCode's built-in file drag
+  // (uses resourceUri from TreeItem) for Copilot Chat, editors, etc.
   readonly dropMimeTypes = [DOCSYNC_MIME_TYPE, "text/uri-list"];
-  readonly dragMimeTypes = [DOCSYNC_MIME_TYPE];
+  readonly dragMimeTypes = [DOCSYNC_MIME_TYPE, "text/uri-list"];
 
   private _onDidChangeTreeData = new vscode.EventEmitter<
     DocsyncTreeItem | undefined | null | void
@@ -50,7 +52,16 @@ export class DocsyncTreeDataProvider
 
     try {
       const entries = await this.service.getTree();
-      this.treeCache = this.buildTree(entries);
+
+      // Get local docs dir for resourceUri on tree items
+      const config = this.service.getConfig();
+      const localDocsDir = config ? expandHome(config.local.docsDir) : undefined;
+
+      this.treeCache = this.buildTree(entries, localDocsDir);
+
+      // Pull files to disk in the background so they exist for drag-and-drop
+      this.service.pullAll().catch(() => {});
+
       return this.treeCache;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Unknown error";
@@ -70,14 +81,14 @@ export class DocsyncTreeDataProvider
   ): Promise<void> {
     // Only allow dragging files, not folders
     const files = source.filter((item) => !item.isFolder);
-    if (files.length > 0) {
-      // Store the remote paths as serializable data
-      const paths = files.map((f) => f.remotePath);
-      dataTransfer.set(
-        DOCSYNC_MIME_TYPE,
-        new vscode.DataTransferItem(paths),
-      );
-    }
+    if (files.length === 0) return;
+
+    // Set internal MIME type for moves within the tree
+    const paths = files.map((f) => f.remotePath);
+    dataTransfer.set(
+      DOCSYNC_MIME_TYPE,
+      new vscode.DataTransferItem(paths),
+    );
   }
 
   public async handleDrop(
@@ -209,7 +220,7 @@ export class DocsyncTreeDataProvider
 
   // --- Tree building ---
 
-  private buildTree(entries: TreeEntry[]): DocsyncTreeItem[] {
+  private buildTree(entries: TreeEntry[], localDocsDir?: string): DocsyncTreeItem[] {
     interface TreeNode {
       name: string;
       path: string;
@@ -274,6 +285,7 @@ export class DocsyncTreeDataProvider
             child.entry,
             isFolder,
             childItems,
+            localDocsDir,
           ),
         );
       }

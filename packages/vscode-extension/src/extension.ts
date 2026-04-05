@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import * as path from "node:path";
+import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import { DocsyncService } from "./docsyncService.js";
 import { DocsyncTreeDataProvider } from "./docsyncTreeDataProvider.js";
@@ -21,11 +22,6 @@ export function activate(context: vscode.ExtensionContext): void {
     canSelectMany: true,
     dragAndDropController: treeProvider,
   });
-
-  // Register virtual document provider for viewing remote files
-  const docProvider = new DocsyncDocumentProvider();
-  const docProviderDisposable =
-    vscode.workspace.registerTextDocumentContentProvider("docsync", docProvider);
 
   // Register commands
   const initCmd = vscode.commands.registerCommand(
@@ -65,7 +61,6 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     treeView,
-    docProviderDisposable,
     initCmd,
     refreshCmd,
     pullAllCmd,
@@ -225,7 +220,21 @@ async function handleViewFile(item?: DocsyncTreeItem): Promise<void> {
   if (!item || item.isFolder) return;
 
   try {
-    const uri = vscode.Uri.parse(`docsync:${item.remotePath}`);
+    // Download the file to the local docs directory so it exists on disk.
+    // This allows Copilot Chat (and other tools) to pick it up from
+    // open editor tabs, since they only recognize real file:// URIs.
+    const config = service.getConfig();
+    const docsDir = config
+      ? expandHome(config.local.docsDir)
+      : path.join(os.homedir(), ".docsync", "docs");
+
+    const localPath = path.join(docsDir, item.remotePath);
+    await fs.mkdir(path.dirname(localPath), { recursive: true });
+
+    const content = await service.viewFile(item.remotePath);
+    await fs.writeFile(localPath, content, "utf-8");
+
+    const uri = vscode.Uri.file(localPath);
     const doc = await vscode.workspace.openTextDocument(uri);
     await vscode.window.showTextDocument(doc, { preview: true });
   } catch (err: unknown) {
@@ -367,15 +376,4 @@ async function showFolderPicker(): Promise<string | undefined> {
   if (!picked) return undefined;
   if (picked.label === "/ (repo root)") return "/";
   return picked.label;
-}
-
-// --- Virtual Document Provider ---
-
-class DocsyncDocumentProvider
-  implements vscode.TextDocumentContentProvider
-{
-  async provideTextDocumentContent(uri: vscode.Uri): Promise<string> {
-    const filePath = uri.path;
-    return service.viewFile(filePath);
-  }
 }
