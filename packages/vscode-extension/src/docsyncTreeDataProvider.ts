@@ -235,7 +235,15 @@ export class DocsyncTreeDataProvider
       children: new Map(),
     };
 
-    const files = entries.filter((e) => e.type === "blob");
+    // Filter out common non-doc files that shouldn't appear in the tree
+    const hiddenFiles = [".gitignore", ".gitattributes", ".gitmodules", ".DS_Store", "Thumbs.db"];
+    const hiddenPrefixes = [".git/"];
+    const files = entries.filter(
+      (e) =>
+        e.type === "blob" &&
+        !hiddenFiles.includes(path.basename(e.path)) &&
+        !hiddenPrefixes.some((prefix) => e.path.startsWith(prefix)),
+    );
 
     for (const file of files) {
       const parts = file.path.split("/");

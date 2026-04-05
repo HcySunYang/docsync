@@ -71,6 +71,8 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   // Auto-initialize if config exists (with progress)
+  // Hide the welcome view immediately to prevent race conditions
+  vscode.commands.executeCommand("setContext", "docsync.loading", true);
   vscode.window.withProgress(
     {
       location: { viewId: "docsyncExplorer" },
@@ -78,6 +80,8 @@ export function activate(context: vscode.ExtensionContext): void {
     },
     async () => {
       const ok = await service.initialize();
+      vscode.commands.executeCommand("setContext", "docsync.loading", false);
+      vscode.commands.executeCommand("setContext", "docsync.initialized", ok);
       if (ok) {
         treeProvider.refresh();
       }
@@ -153,6 +157,7 @@ async function handleInit(): Promise<void> {
     );
 
     treeProvider.refresh();
+    vscode.commands.executeCommand("setContext", "docsync.initialized", true);
     vscode.window.showInformationMessage("DocSync initialized successfully!");
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";

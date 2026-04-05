@@ -22,14 +22,15 @@
     "viewsWelcome": [
       {
         "view": "docsyncExplorer",
-        "contents": "No DocSync configuration found.\n[Initialize DocSync](command:docsync.init)"
+        "contents": "No DocSync configuration found.\n[Initialize DocSync](command:docsync.init)",
+        "when": "!docsync.loading && !docsync.initialized"
       }
     ],
     "commands": [
       {
         "command": "docsync.refresh",
-        "title": "Refresh",
-        "icon": "$(refresh)"
+        "title": "Sync from Remote",
+        "icon": "$(sync)"
       },
       {
         "command": "docsync.pullAll",
@@ -62,11 +63,6 @@
       "view/title": [
         {
           "command": "docsync.refresh",
-          "when": "view == docsyncExplorer",
-          "group": "navigation"
-        },
-        {
-          "command": "docsync.pullAll",
           "when": "view == docsyncExplorer",
           "group": "navigation"
         }
